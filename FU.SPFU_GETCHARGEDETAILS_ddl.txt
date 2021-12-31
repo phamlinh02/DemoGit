@@ -1,0 +1,70 @@
+﻿-- Start of DDL Script for Procedure FU.SPFU_GETCHARGEDETAILS
+-- Generated 12/24/2021 11:34:50 AM from FU@tradingtest
+
+CREATE OR REPLACE 
+PROCEDURE spfu_getchargedetails(
+    pclientcode in varchar2, -- số tài khoản KH
+    pfromdate in varchar2 , -- ngày bắt đầu
+    ptodate in varchar2, -- ngày kết thúc
+    pstockcode in varchar2, --mã ck
+    pdetails out pkg_fpts_global.ref_cursor
+)
+as
+
+
+/*
+create by : LinhPTT
+created date : 01/12/2021
+desc : Báo cáo thuế thu nhập cá nhân từ chuyển nhượng hợp đồng tương lai
+*/
+
+v_fromdate date  := case upper (pfromdate)
+                           --when 'P'  then to_date(sysdate,'DD/MM/YYYY')
+                           when 'P'  then trunc(sysdate)
+                            when 'ALL' then null
+                            else to_date(pfromdate,'DD/MM/YYYY')end ;
+v_todate date  :=case upper(ptodate)
+                       -- when 'P' then  to_date(sysdate,'DD/MM/YYYY')+1
+                       when 'P'  then trunc(sysdate+1)
+                        when 'ALL' then null
+                        else to_date(ptodate,'DD/MM/YYYY')+1 end ;
+
+begin
+    --spfu_updateactivitylogs('058C000000', 0, 'client: '|| pclientcode||' ,pstockcode:'||pstockcode||',pfromdate: '||pfromdate||' ,ptodate: '||ptodate, 'spfu_getchargedetails');
+    open pdetails for
+    select a.aclientcode,
+            t.aname,
+            t.aaddress, --dịa chỉ
+            t.aidentifynumber, --số cmt/cccd
+            t.ataxnumber, --MS thuế
+            a.abackupdate, --ngày
+            a.astockcode,
+            case abuysell when 'B' then aquantity  end as aquantitybuy, --khối lượng mua
+            case abuysell when 'S' then aquantity  end as aquantitysell, -- khối lượng bán
+            b.aprice, --giá khớp
+            b.aprice*b.amutiplier*b.aquantity as TradeValue, --giá trị khớp
+            aimrate_vsd,
+            b.aquantity*b.aprice*b.amutiplier*aimrate_vsd*0.5 as Taxbase,-- giá chuyển nhượng chứng khoán từng lần
+            b.aquantity*b.aprice*b.amutiplier*aimrate_vsd*0.5*a.atax/100 as PIT --Thuế TNCN,
+    from tfu_charge_his a
+    join tfu_tradedetails_his  b on a.aclientcode = b.aclientcode and a.abackupdate = b.abackupdate and a.astockcode = b.astockcode
+    inner join ezopen.topen_dcustomerinfo t on a.aclientcode = t.acustaccount
+    inner join tfu_paracontract c on a.astockcode = c.aconcde
+    where (a.abackupdate>=v_fromdate or v_fromdate is null)
+    and (a.abackupdate< v_todate or v_todate is null)
+    and a.aclientcode = pclientcode
+    and (a.astockcode= pstockcode or pstockcode is null)
+
+    order by abackupdate desc, c.aenddte asc;
+end;
+/
+
+-- Grants for Procedure
+GRANT EXECUTE ON spfu_getchargedetails TO fu_ezreport
+/
+GRANT EXECUTE ON spfu_getchargedetails TO report
+/
+
+
+-- End of DDL Script for Procedure FU.SPFU_GETCHARGEDETAILS
+
